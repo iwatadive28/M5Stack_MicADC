@@ -1,10 +1,14 @@
 #include <M5Core2.h>
 #include "arduinoFFT.h"
+#include <driver/i2s.h>
+#include <math.h>
 
 #define MIC 36
 #define SAMPLING_FREQUENCY 20000
 const uint16_t FFTsamples = 256;
-#define SPEAKER_PIN 25  // Core2のスピーカー用ピン
+
+#define SPEAKER_I2S_PORT I2S_NUM_0
+#define SAMPLE_RATE 16000
 
 double vReal[FFTsamples];
 double vImag[FFTsamples];
@@ -21,6 +25,47 @@ float dmax = 5.0;
 bool showFFT = true;    // 表示モード：true=FFT, false=Time
 bool lastBtnA = false;  // Aボタン押下状態
 
+void i2sToneInit() {
+  M5.Axp.SetSpkEnable(true);  // スピーカーアンプ ON
+
+  i2s_config_t i2s_config = {
+      .mode = (i2s_mode_t)(I2S_MODE_MASTER | I2S_MODE_TX),
+      .sample_rate = SAMPLE_RATE,
+      .bits_per_sample = I2S_BITS_PER_SAMPLE_16BIT,
+      .channel_format = I2S_CHANNEL_FMT_ONLY_RIGHT,
+      .communication_format = I2S_COMM_FORMAT_I2S_MSB,
+      .intr_alloc_flags = 0,
+      .dma_buf_count = 8,
+      .dma_buf_len = 64,
+      .use_apll = false,
+      .tx_desc_auto_clear = true,
+      .fixed_mclk = 0};
+
+  i2s_pin_config_t pin_config = {
+      .bck_io_num = 12,
+      .ws_io_num = 0,
+      .data_out_num = 2,
+      .data_in_num = I2S_PIN_NO_CHANGE};
+
+  i2s_driver_install(SPEAKER_I2S_PORT, &i2s_config, 0, NULL);
+  i2s_set_pin(SPEAKER_I2S_PORT, &pin_config);
+  i2s_zero_dma_buffer(SPEAKER_I2S_PORT);
+}
+
+void i2sTone(uint32_t freq, uint32_t duration_ms) {
+  const int samples = SAMPLE_RATE / freq;
+  int16_t wave[samples];
+  for (int i = 0; i < samples; i++) {
+    wave[i] = (int16_t)(8000.0 * sinf(2.0 * PI * i / samples));
+  }
+
+  size_t bytes_written;
+  int loops = (SAMPLE_RATE * duration_ms) / (samples * 1000);
+  for (int i = 0; i < loops; i++) {
+    i2s_write(SPEAKER_I2S_PORT, wave, sizeof(wave), &bytes_written, portMAX_DELAY);
+  }
+}
+
 // ------------ セットアップ ------------
 void setup() {
   M5.begin();
@@ -29,11 +74,15 @@ void setup() {
   M5.Lcd.setCursor(5, 5);
   M5.Lcd.println("FFT Audio Monitor");
 
-  pinMode(SPEAKER_PIN, OUTPUT);  // ピッ音用
+  // スピーカーアンプを有効にする
+  i2sToneInit();  // 必ず最初に呼ぶ（初期化）
+  i2sTone(1000, 200);  // 1kHz のピッ音（200ms）
+
   pinMode(MIC, INPUT);           // マイク入力
 
   sampling_period_us = round(1000000 * (1.0 / SAMPLING_FREQUENCY));
 }
+
 
 // ------------ 波形サンプリング ------------
 void sample(int nsamples) {
@@ -83,7 +132,7 @@ void loop() {
 
   if (currentBtnA && !lastBtnA) {
     showFFT = !showFFT;
-    tone(SPEAKER_PIN, 1000, 100);  // ピッ音
+    i2sTone(1000, 200);  // 1kHz のピッ音（200ms）
   }
   lastBtnA = currentBtnA;
 
