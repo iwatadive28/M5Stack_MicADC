@@ -1,0 +1,28 @@
+# PlatformIO build output
+.pio/
+.pioenvs/
+.pio/libdeps/
+.pio/build/
+
+# VS Code settings
+.vscode/
+
+# OS-specific files
+.DS_Store
+Thumbs.db
+
+# Backup files
+*.bak
+*.swp
+*.swo
+*.tmp
+
+# Compiled object files (if any)
+*.elf
+*.bin
+*.hex
+*.map
+
+# Python virtualenv (if used)
+.venv/
+env/
